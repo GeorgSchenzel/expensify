@@ -2,48 +2,53 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { CategoryMultiSelect } from '@/components/category-multi-select'
-import type { Category, GroupBy } from '@/lib/types'
+import { RANGE_PRESETS, type RangePreset } from '@/lib/dashboard-range'
+import type { Category } from '@/lib/types'
 import { cn, fromDateKey, toDateKey } from '@/lib/utils'
 
-const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
-]
-
 export interface DashboardFilterValue {
+  /** Null when custom dates are set. */
+  preset: RangePreset | null
+  /** Resolved dates of the preset (or the custom dates); both absent for "All". */
   from?: string
   to?: string
   cat: string[]
-  groupBy: GroupBy
 }
 
 interface DashboardFiltersProps {
   categories: Category[]
   value: DashboardFilterValue
-  onChange: (value: DashboardFilterValue) => void
+  isDefault: boolean
+  onPreset: (preset: RangePreset) => void
+  onCustom: (from: string | undefined, to: string | undefined) => void
+  onCategories: (cat: string[]) => void
+  onReset: () => void
 }
 
-export function DashboardFilters({ categories, value, onChange }: DashboardFiltersProps) {
-  const hasFilters = Boolean(value.from || value.to || value.cat.length > 0)
-
+export function DashboardFilters({
+  categories,
+  value,
+  isDefault,
+  onPreset,
+  onCustom,
+  onCategories,
+  onReset,
+}: DashboardFiltersProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* Group-by toggle */}
-      <div className="flex items-center rounded-md border border-input overflow-hidden h-8">
-        {GROUP_BY_OPTIONS.map((opt) => (
+      <div className="flex h-8 items-center overflow-hidden rounded-md border border-input bg-white">
+        {RANGE_PRESETS.map((p) => (
           <button
-            key={opt.value}
+            key={p.key}
             type="button"
-            onClick={() => onChange({ ...value, groupBy: opt.value })}
+            title={p.title}
+            onClick={() => onPreset(p.key)}
             className={cn(
-              'px-3 text-xs h-full transition-colors',
-              value.groupBy === opt.value
-                ? 'bg-neutral-900 text-white'
-                : 'text-muted-foreground hover:bg-neutral-100'
+              'h-full whitespace-nowrap px-2.5 text-xs transition-colors',
+              value.preset === p.key ? 'bg-neutral-900 text-white' : 'text-muted-foreground hover:bg-neutral-100'
             )}
           >
-            {opt.label}
+            {p.label}
           </button>
         ))}
       </div>
@@ -51,13 +56,9 @@ export function DashboardFilters({ categories, value, onChange }: DashboardFilte
       <DateRangePicker
         from={fromDateKey(value.from)}
         to={fromDateKey(value.to)}
-        onChange={(from, to) =>
-          onChange({
-            ...value,
-            from: from ? toDateKey(from) : undefined,
-            to: to ? toDateKey(to) : undefined,
-          })
-        }
+        placeholder="All time"
+        className={cn(value.preset === null && 'border-neutral-900')}
+        onChange={(from, to) => onCustom(from ? toDateKey(from) : undefined, to ? toDateKey(to) : undefined)}
       />
 
       {categories.length > 0 && (
@@ -65,18 +66,13 @@ export function DashboardFilters({ categories, value, onChange }: DashboardFilte
           idPrefix="dash-cat"
           categories={categories}
           selected={value.cat}
-          onChange={(cat) => onChange({ ...value, cat })}
+          onChange={onCategories}
         />
       )}
 
-      {hasFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange({ cat: [], groupBy: value.groupBy })}
-          className="h-8 text-xs text-muted-foreground gap-1"
-        >
-          <X className="w-3 h-3" />
+      {!isDefault && (
+        <Button variant="ghost" size="sm" onClick={onReset} className="h-8 gap-1 text-xs text-muted-foreground">
+          <X className="h-3 w-3" />
           Reset
         </Button>
       )}

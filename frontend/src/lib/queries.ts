@@ -35,6 +35,11 @@ export function useDashboard(q: DashboardQuery) {
   })
 }
 
+/** Detected subscriptions etc.; independent of the dashboard filters. */
+export function useRecurringPayments() {
+  return useQuery({ queryKey: [...keys.dashboard, 'recurring'], queryFn: api.recurring })
+}
+
 /** Categorization progress. Lives under the transactions key so it refreshes with them. */
 export function useTransactionStats() {
   return useQuery({ queryKey: [...keys.transactions, 'stats'], queryFn: api.transactions.stats })

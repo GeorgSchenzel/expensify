@@ -85,34 +85,101 @@ export interface ImportPreview {
 
 export type GroupBy = 'week' | 'month' | 'year'
 
-/** One chart series. `key` is the category id (or `__uncategorized__`). */
-export interface ChartSeries {
+export interface DateRange {
+  from: string
+  to: string
+}
+
+/** Totals of a date range. Income ignores the category filter. */
+export interface DashboardSummary {
+  expenses: number
+  income: number
+  net: number
+  /** `net / income`; null without income. */
+  savingsRate: number | null
+  expenseCount: number
+  incomeCount: number
+}
+
+/** `key` is the category id, or `__uncategorized__`. */
+export interface CategorySpend {
   key: string
   name: string
   colorHex: string
-}
-
-export interface PieSlice extends ChartSeries {
-  value: number
+  /** Positive amount (spent, or received for income). */
+  spend: number
+  count: number
+  /** Null when there is no previous range to compare with. */
+  previousSpend: number | null
 }
 
 /**
- * `period` is "yyyy-MM-dd" (week start, Monday), "yyyy-MM" or "yyyy"; every
- * other key is a series key with that period's spend.
+ * `period` is "yyyy-MM-dd" (week start, Monday), "yyyy-MM" or "yyyy".
+ * `incomeBy` / `expensesBy` hold positive amounts per category key (non-zero only).
  */
-export type ChartPoint = { period: string } & Record<string, number | string>
+export interface FlowPoint {
+  period: string
+  income: number
+  expenses: number
+  net: number
+  incomeBy: Record<string, number>
+  expensesBy: Record<string, number>
+}
+
+export interface PacePoint {
+  day: number
+  current: number | null
+  previous: number | null
+  average: number | null
+}
+
+/** Cumulative spend through the month containing the range end. */
+export interface Pace {
+  /** "yyyy-MM". */
+  month: string
+  daysInMonth: number
+  throughDay: number
+  spent: number
+  /** Null once the month is over. */
+  projected: number | null
+  previousTotal: number | null
+  averageTotal: number | null
+  averageMonths: number
+  points: PacePoint[]
+}
 
 export interface DashboardData {
-  totalCount: number
-  totalExpenses: number
-  totalIncome: number
-  netBalance: number
   groupBy: GroupBy
-  series: ChartSeries[]
-  pie: PieSlice[]
-  bar: ChartPoint[]
-  lineByMonth: ChartPoint[]
-  lineByYear: ChartPoint[]
+  /** Extent of all stored transactions; null when there are none. */
+  dataRange: DateRange | null
+  previousRange: DateRange | null
+  summary: DashboardSummary
+  previous: DashboardSummary | null
+  categories: CategorySpend[]
+  incomeCategories: CategorySpend[]
+  flow: FlowPoint[]
+  /** Days with spend only. */
+  daily: { date: string; spend: number }[]
+  /** Biggest expense per merchant; `similarCount` counts that merchant's expenses in the range. */
+  largest: (Transaction & { similarCount: number })[]
+  uncategorized: { count: number; spend: number }
+  pace: Pace | null
+}
+
+export type Cadence = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
+export interface RecurringPayment {
+  key: string
+  description: string
+  categoryId: string | null
+  cadence: Cadence
+  /** Latest amount, positive. */
+  amount: number
+  count: number
+  firstDate: string
+  lastDate: string
+  nextDate: string
+  annualCost: number
 }
 
 export interface TransactionQuery {
@@ -129,7 +196,8 @@ export interface DashboardQuery {
   from?: string
   to?: string
   cat?: string[]
-  groupBy?: GroupBy
+  /** `auto` picks week, month or year from the range length. */
+  groupBy?: GroupBy | 'auto'
 }
 
 export interface RuleDraft {

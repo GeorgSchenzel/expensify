@@ -22,6 +22,9 @@ original Next.js app, kept for reference only. Do not edit it.
 - Regexes use the Rust `regex` crate (no look-around/backreferences); rule creation
   validates with the same builder the importer uses.
 - Chart series are keyed by **category id** (`__uncategorized__` for none), never by name.
+- Dashboard aggregates are computed in memory in `routes/dashboard.rs` (comparisons, pace and
+  recurring detection need data outside the range). Income ignores the category filter. The
+  flow chart folds small categories into a frontend-only `__other__` series.
 - Schema changes: add a new file in `backend/migrations/`; never edit an applied migration.
 
 ## Frontend

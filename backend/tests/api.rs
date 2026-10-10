@@ -400,36 +400,52 @@ async fn dashboard_aggregates() {
 
     let (status, d) = call(&app, "GET", "/api/dashboard", None).await;
     assert_eq!(status, StatusCode::OK, "{d}");
-    assert_eq!(d["totalCount"], 4);
-    assert_eq!(d["totalExpenses"], 68.89); // 42.10 + 12.80 + 13.99
-    assert_eq!(d["totalIncome"], 2500.0);
-    assert_eq!(d["netBalance"], 2431.11);
+    assert_eq!(d["summary"]["expenses"], 68.89); // 42.10 + 12.80 + 13.99
+    assert_eq!(d["summary"]["income"], 2500.0);
+    assert_eq!(d["summary"]["net"], 2431.11);
+    assert_eq!(d["summary"]["expenseCount"], 3);
     assert_eq!(d["groupBy"], "month");
+    assert_eq!(d["dataRange"], json!({ "from": "2026-09-03", "to": "2026-10-02" }));
+    assert!(d["previous"].is_null(), "open range has nothing to compare with");
 
     let names: Vec<&str> =
-        d["series"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+        d["categories"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
     assert_eq!(names, ["Groceries", "Streaming", "Uncategorized"]);
-    assert_eq!(d["pie"][0]["name"], "Groceries");
-    assert_eq!(d["pie"][0]["value"], 42.1);
+    assert_eq!(d["categories"][0]["spend"], 42.1);
+    assert_eq!(d["incomeCategories"][0]["key"], "__uncategorized__");
 
-    let bar = d["bar"].as_array().unwrap();
-    assert_eq!(bar.len(), 2);
-    assert_eq!(bar[0]["period"], "2026-09");
-    assert_eq!(bar[0][&groceries], 42.1);
-    assert_eq!(bar[0][&streaming], 0.0);
-    assert_eq!(bar[1]["__uncategorized__"], 12.8);
-    assert_eq!(d["lineByYear"].as_array().unwrap().len(), 1);
+    let flow = d["flow"].as_array().unwrap();
+    assert_eq!(flow.len(), 2);
+    assert_eq!(flow[0]["period"], "2026-09");
+    assert_eq!(flow[0]["expensesBy"][&groceries], 42.1);
+    assert_eq!(flow[0]["incomeBy"]["__uncategorized__"], 2500.0);
+    assert_eq!(flow[1]["expensesBy"]["__uncategorized__"], 12.8);
+    assert_eq!(d["largest"][0]["description"], "BILLA DANKT 1100");
+    assert_eq!(d["largest"][0]["similarCount"], 1);
+    assert_eq!(d["uncategorized"]["count"], 1);
 
     let (_, weekly) = call(&app, "GET", "/api/dashboard?groupBy=week", None).await;
+    let (_, auto) = call(&app, "GET", "/api/dashboard?groupBy=auto", None).await;
+    assert_eq!(auto["groupBy"], "week"); // the data spans one month
+
     let periods: Vec<&str> =
-        weekly["bar"].as_array().unwrap().iter().map(|p| p["period"].as_str().unwrap()).collect();
+        weekly["flow"].as_array().unwrap().iter().map(|p| p["period"].as_str().unwrap()).collect();
     assert_eq!(periods, ["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"]);
 
-    let (_, only) =
-        call(&app, "GET", &format!("/api/dashboard?cat={streaming}&from=2026-10-01"), None).await;
-    assert_eq!(only["totalExpenses"], 13.99);
-    assert_eq!(only["series"].as_array().unwrap().len(), 1);
-    assert_eq!(only["totalIncome"], 0.0);
+    let (_, only) = call(
+        &app,
+        "GET",
+        &format!("/api/dashboard?cat={streaming}&from=2026-10-01&to=2026-10-31"),
+        None,
+    )
+    .await;
+    assert_eq!(only["summary"]["expenses"], 13.99);
+    assert_eq!(only["categories"].as_array().unwrap().len(), 1);
+    assert_eq!(only["summary"]["income"], 0.0);
+    // September is the comparison month; Streaming had no spend there.
+    assert_eq!(only["previousRange"], json!({ "from": "2026-09-01", "to": "2026-09-30" }));
+    assert_eq!(only["previous"]["income"], 2500.0);
+    assert_eq!(only["categories"][0]["previousSpend"], 0.0);
 
     assert_eq!(
         call(&app, "GET", "/api/dashboard?groupBy=day", None).await.0,
@@ -437,8 +453,12 @@ async fn dashboard_aggregates() {
     );
 
     let (_, empty) = call(&app, "GET", "/api/dashboard?from=2030-01-01", None).await;
-    assert_eq!(empty["bar"].as_array().unwrap().len(), 0);
-    assert_eq!(empty["totalExpenses"], 0.0);
+    assert_eq!(empty["flow"].as_array().unwrap().len(), 0);
+    assert_eq!(empty["summary"]["expenses"], 0.0);
+
+    let (status, recurring) = call(&app, "GET", "/api/dashboard/recurring", None).await;
+    assert_eq!(status, StatusCode::OK, "{recurring}");
+    assert_eq!(recurring, json!([]));
 }
 
 #[tokio::test]

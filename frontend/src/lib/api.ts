@@ -5,6 +5,7 @@ import type {
   ImportPreview,
   ImportResult,
   MappingConfig,
+  RecurringPayment,
   RuleDraft,
   RulePreview,
   RuleType,
@@ -108,4 +109,5 @@ export const api = {
     request<ImportPreview>('POST', '/import/preview', { rows, mapping }),
   dashboard: (q: DashboardQuery) =>
     request<DashboardData>('GET', `/dashboard${toQueryString({ ...q })}`),
+  recurring: () => request<RecurringPayment[]>('GET', '/dashboard/recurring'),
 }
