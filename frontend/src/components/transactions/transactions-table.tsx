@@ -10,6 +10,7 @@ import {
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import type { Category, Transaction } from '@/lib/types'
+import { useMediaQuery } from '@/lib/use-media-query'
 import { cn, formatCurrency, formatDate } from '@/lib/utils'
 import { buildColumns } from './columns'
 import { ExportButton } from './export-button'
@@ -43,6 +44,9 @@ export function TransactionsTable({ transactions, categories }: TransactionsTabl
   })
 
   const rows = table.getRowModel().rows
+  // Render one layout only; every row has an interactive category picker, so
+  // mounting both and hiding one with CSS doubles the work.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
 
   return (
     <div className="space-y-3">
@@ -66,49 +70,53 @@ export function TransactionsTable({ transactions, categories }: TransactionsTabl
       <BulkCategoryApply table={table} categories={categories} />
 
       {/* ── Mobile card list ── */}
-      <div className="md:hidden rounded-lg border border-border overflow-hidden divide-y divide-border bg-white">
-        {rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-muted-foreground">No transactions found.</p>
-        ) : (
-          rows.map((row) => <MobileRow key={row.id} tx={row.original} categories={categories} />)
-        )}
-      </div>
+      {!isDesktop && (
+        <div className="rounded-lg border border-border overflow-hidden divide-y divide-border bg-white">
+          {rows.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">No transactions found.</p>
+          ) : (
+            rows.map((row) => <MobileRow key={row.id} tx={row.original} categories={categories} />)
+          )}
+        </div>
+      )}
 
       {/* ── Desktop table ── */}
-      <div className="hidden md:block rounded-lg border border-border overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-neutral-50 border-b border-border">
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((header) => (
-                  <th key={header.id} className="px-4 py-2.5 text-left">
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="divide-y divide-border bg-white">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  No transactions found.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="hover:bg-neutral-50/50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-2.5">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+      {isDesktop && (
+        <div className="rounded-lg border border-border overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-neutral-50 border-b border-border">
+              {table.getHeaderGroups().map((hg) => (
+                <tr key={hg.id}>
+                  {hg.headers.map((header) => (
+                    <th key={header.id} className="px-4 py-2.5 text-left">
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
                   ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </thead>
+            <tbody className="divide-y divide-border bg-white">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No transactions found.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-neutral-50/50">
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-2.5">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
