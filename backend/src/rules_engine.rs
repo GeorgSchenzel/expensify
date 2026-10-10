@@ -52,12 +52,11 @@ pub fn compile(rules: &[Rule]) -> Vec<CompiledRule> {
         .collect()
 }
 
-/// Returns the category of the first matching rule.
-pub fn categorize<'a>(rules: &'a [CompiledRule], description: &str) -> Option<&'a str> {
-    let lowered = description.to_lowercase();
-    rules
-        .iter()
-        .find(|rule| match &rule.matcher {
+impl CompiledRule {
+    /// `lowered` must be `description.to_lowercase()`; passed in so callers
+    /// testing many rules against one description lowercase it only once.
+    pub fn is_match(&self, description: &str, lowered: &str) -> bool {
+        match &self.matcher {
             Matcher::Contains { needle, case_insensitive: true } => {
                 lowered.contains(needle.as_str())
             }
@@ -65,7 +64,16 @@ pub fn categorize<'a>(rules: &'a [CompiledRule], description: &str) -> Option<&'
                 description.contains(needle.as_str())
             }
             Matcher::Regex(re) => re.is_match(description),
-        })
+        }
+    }
+}
+
+/// Returns the category of the first matching rule.
+pub fn categorize<'a>(rules: &'a [CompiledRule], description: &str) -> Option<&'a str> {
+    let lowered = description.to_lowercase();
+    rules
+        .iter()
+        .find(|rule| rule.is_match(description, &lowered))
         .map(|rule| rule.category_id.as_str())
 }
 

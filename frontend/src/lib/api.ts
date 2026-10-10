@@ -4,10 +4,13 @@ import type {
   DashboardQuery,
   ImportResult,
   MappingConfig,
+  RuleDraft,
+  RulePreview,
   RuleType,
   RuleWithCategory,
   Transaction,
   TransactionQuery,
+  TransactionStats,
 } from './types'
 
 /** Error returned by the backend as `{ "error": "..." }`. */
@@ -84,10 +87,15 @@ export const api = {
     reorder: (ids: string[]) => request<void>('PUT', '/rules/order', { ids }),
     apply: (includeCategorized: boolean) =>
       request<{ updated: number; checked: number }>('POST', '/rules/apply', { includeCategorized }),
+    preview: (draft: RuleDraft) => request<RulePreview>('POST', '/rules/preview', draft),
   },
   transactions: {
-    list: (q: TransactionQuery) =>
-      request<Transaction[]>('GET', `/transactions${toQueryString({ ...q })}`),
+    list: ({ uncategorized, ...q }: TransactionQuery) =>
+      request<Transaction[]>(
+        'GET',
+        `/transactions${toQueryString({ ...q, uncategorized: uncategorized ? 'true' : undefined })}`
+      ),
+    stats: () => request<TransactionStats>('GET', '/transactions/stats'),
     setCategory: (id: string, categoryId: string | null) =>
       request<Transaction>('PATCH', `/transactions/${encodeURIComponent(id)}`, { categoryId }),
     bulkSetCategory: (ids: string[], categoryId: string | null) =>

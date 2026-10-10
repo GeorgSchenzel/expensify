@@ -134,6 +134,7 @@ async fn dashboard(
         from: parse_optional_date("from", query.from.as_deref())?,
         to: parse_optional_date("to", query.to.as_deref())?,
         category_ids: query.cat.into_iter().filter(|c| !c.is_empty()).collect(),
+        uncategorized: false,
         amount_min_cents: None,
         amount_max_cents: None,
         search: None,
@@ -148,7 +149,8 @@ async fn dashboard(
 
     // Income ignores the category filter: income is rarely categorised and the
     // summary should still show the full balance for the period.
-    let income_filter = TransactionFilter { category_ids: Vec::new(), ..filter };
+    let income_filter =
+        TransactionFilter { category_ids: Vec::new(), uncategorized: false, ..filter };
     let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
         "SELECT COALESCE(SUM(amount_cents), 0) FROM transactions WHERE amount_cents > 0",
     );

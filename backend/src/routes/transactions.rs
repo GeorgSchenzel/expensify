@@ -18,6 +18,7 @@ pub fn router() -> Router<SqlitePool> {
     Router::new()
         .route("/", get(list))
         .route("/bulk-category", post(bulk_update_category))
+        .route("/stats", get(stats))
         .route("/{id}", patch(update_category))
 }
 
@@ -28,6 +29,8 @@ pub struct ListQuery {
     to: Option<String>,
     #[serde(default)]
     cat: Vec<String>,
+    /// `true` includes transactions without a category (combined with `cat` as OR).
+    uncategorized: Option<String>,
     amount_min: Option<String>,
     amount_max: Option<String>,
     search: Option<String>,
@@ -37,6 +40,7 @@ pub struct TransactionFilter {
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
     pub category_ids: Vec<String>,
+    pub uncategorized: bool,
     pub amount_min_cents: Option<i64>,
     pub amount_max_cents: Option<i64>,
     pub search: Option<String>,
@@ -56,6 +60,15 @@ impl TryFrom<ListQuery> for TransactionFilter {
             from: parse_optional_date("from", q.from.as_deref())?,
             to: parse_optional_date("to", q.to.as_deref())?,
             category_ids: q.cat.into_iter().filter(|c| !c.is_empty()).collect(),
+            uncategorized: match q.uncategorized.as_deref().map(str::trim) {
+                None | Some("") | Some("false") | Some("0") => false,
+                Some("true") | Some("1") => true,
+                Some(other) => {
+                    return Err(AppError::bad_request(format!(
+                        "Invalid uncategorized \"{other}\"; expected true or false"
+                    )));
+                }
+            },
             amount_min_cents: bound(q.amount_min, Round::Ceil)?,
             amount_max_cents: bound(q.amount_max, Round::Floor)?,
             search: q.search.map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()),
@@ -71,13 +84,23 @@ pub fn push_filters(qb: &mut QueryBuilder<'_, Sqlite>, filter: &TransactionFilte
     if let Some(to) = filter.to {
         qb.push(" AND date <= ").push_bind(to.format("%Y-%m-%d").to_string());
     }
-    if !filter.category_ids.is_empty() {
-        qb.push(" AND category_id IN (");
-        let mut list = qb.separated(", ");
-        for id in &filter.category_ids {
-            list.push_bind(id.clone());
+    match (filter.category_ids.is_empty(), filter.uncategorized) {
+        (true, false) => {}
+        (true, true) => {
+            qb.push(" AND category_id IS NULL");
         }
-        qb.push(")");
+        (false, uncategorized) => {
+            qb.push(if uncategorized {
+                " AND (category_id IS NULL OR category_id IN ("
+            } else {
+                " AND (category_id IN ("
+            });
+            let mut list = qb.separated(", ");
+            for id in &filter.category_ids {
+                list.push_bind(id.clone());
+            }
+            qb.push("))");
+        }
     }
     if let Some(min) = filter.amount_min_cents {
         qb.push(" AND amount_cents >= ").push_bind(min);
@@ -175,4 +198,20 @@ async fn bulk_update_category(
     }
     tx.commit().await?;
     Ok(Json(BulkResult { updated }))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Stats {
+    total: i64,
+    uncategorized: i64,
+}
+
+/// Categorization progress across all transactions.
+async fn stats(State(pool): State<SqlitePool>) -> AppResult<Json<Stats>> {
+    let (total, uncategorized): (i64, i64) =
+        sqlx::query_as("SELECT COUNT(*), COALESCE(SUM(category_id IS NULL), 0) FROM transactions")
+            .fetch_one(&pool)
+            .await?;
+    Ok(Json(Stats { total, uncategorized }))
 }

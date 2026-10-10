@@ -42,7 +42,10 @@ export function RulesTable({ rules }: { rules: RuleWithCategory[] }) {
       client.setQueryData<RuleWithCategory[]>(keys.rules, ordered)
     },
     onError: (err) => toast.error(errorMessage(err)),
-    onSettled: () => client.invalidateQueries({ queryKey: keys.rules }),
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: keys.rules })
+      client.invalidateQueries({ queryKey: [...keys.transactions, 'rule-preview'] })
+    },
   })
 
   function handleDragEnd(event: DragEndEvent) {
@@ -119,7 +122,10 @@ function SortableRow({
     },
     onSuccess: () => toast.success('Rule deleted'),
     onError: (err) => toast.error(errorMessage(err)),
-    onSettled: () => client.invalidateQueries({ queryKey: keys.rules }),
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: keys.rules })
+      client.invalidateQueries({ queryKey: [...keys.transactions, 'rule-preview'] })
+    },
   })
 
   const style = {

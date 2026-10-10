@@ -29,6 +29,8 @@ original Next.js app, kept for reference only. Do not edit it.
 - Server state goes through TanStack Query (`src/lib/queries.ts`); after a mutation,
   invalidate the affected keys with `useInvalidate()`.
 - Filter state lives in URL search params.
+- The Categorize page's match counts come from `POST /api/rules/preview` (backend matcher).
+  `lib/grouping.ts` and `Highlight` are display-only heuristics; never derive counts from them.
 - `components/ui/` are shadcn components (Tailwind v4 syntax: `max-h-(--var)`, not
   `max-h-[--var]`). `date-range-picker.tsx` deliberately uses `mode="single"` with custom
   range modifiers; react-day-picker's range mode blocks the nav arrows.

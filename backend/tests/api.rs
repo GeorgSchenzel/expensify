@@ -425,3 +425,71 @@ async fn apply_rules_to_existing_transactions() {
     let (_, salary) = call(&app, "GET", "/api/transactions?search=salary", None).await;
     assert_eq!(salary[0]["categoryId"], Value::Null);
 }
+
+#[tokio::test]
+async fn rule_preview_counts_what_a_new_rule_would_do() {
+    let app = app().await;
+    call(&app, "POST", "/api/import", Some(json!({ "rows": rows(), "mapping": mapping() }))).await;
+    let groceries = create_category(&app, "Groceries", "#10b981").await;
+
+    let preview = |pattern: &str, kind: &str| {
+        let body = json!({ "pattern": pattern, "type": kind, "isCaseInsensitive": true });
+        let app = app.clone();
+        async move { call(&app, "POST", "/api/rules/preview", Some(body)).await }
+    };
+
+    let (status, p) = preview("  BILLA ", "CONTAINS").await;
+    assert_eq!(status, StatusCode::OK, "{p}");
+    assert_eq!(p["newMatches"], 1);
+    assert_eq!(p["newMatchAmount"], -42.1);
+    assert_eq!(p["shadowed"], 0);
+    assert_eq!(p["newMatchIds"].as_array().unwrap().len(), 1);
+
+    let (_, p) = preview("^(billa|spar)", "REGEX").await;
+    assert_eq!(p["newMatches"], 2);
+
+    // Matching nothing is fine; invalid input is a 400 like on create.
+    assert_eq!(preview("zzz", "CONTAINS").await.1["newMatches"], 0);
+    assert_eq!(preview("(unclosed", "REGEX").await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(preview("   ", "CONTAINS").await.0, StatusCode::BAD_REQUEST);
+
+    // An existing (not yet applied) rule matching first makes rows "shadowed".
+    call(&app, "POST", "/api/rules", Some(json!({ "pattern": "billa", "type": "CONTAINS", "categoryId": groceries, "isCaseInsensitive": true }))).await;
+    let (_, p) = preview("billa", "CONTAINS").await;
+    assert_eq!((p["newMatches"].as_i64(), p["shadowed"].as_i64()), (Some(0), Some(1)));
+
+    // After applying, the row is categorized and reported per category.
+    call(&app, "POST", "/api/rules/apply", Some(json!({}))).await;
+    let (_, p) = preview("billa", "CONTAINS").await;
+    assert_eq!(p["shadowed"], 0);
+    assert_eq!(p["categorizedMatches"][0]["categoryId"], groceries.as_str());
+    assert_eq!(p["categorizedMatches"][0]["count"], 1);
+}
+
+#[tokio::test]
+async fn uncategorized_filter_and_stats() {
+    let app = app().await;
+    call(&app, "POST", "/api/import", Some(json!({ "rows": rows(), "mapping": mapping() }))).await;
+    let cat = create_category(&app, "Groceries", "#10b981").await;
+    let (_, all) = call(&app, "GET", "/api/transactions?search=billa", None).await;
+    let billa = all[0]["id"].as_str().unwrap().to_owned();
+    call(&app, "PATCH", &format!("/api/transactions/{billa}"), Some(json!({ "categoryId": cat })))
+        .await;
+
+    let count = |v: &Value| v.as_array().unwrap().len();
+    let (_, unc) = call(&app, "GET", "/api/transactions?uncategorized=true", None).await;
+    assert_eq!(count(&unc), 3);
+    let (_, both) =
+        call(&app, "GET", &format!("/api/transactions?uncategorized=true&cat={cat}"), None).await;
+    assert_eq!(count(&both), 4);
+    let (_, only_cat) = call(&app, "GET", &format!("/api/transactions?cat={cat}"), None).await;
+    assert_eq!(count(&only_cat), 1);
+    assert_eq!(
+        call(&app, "GET", "/api/transactions?uncategorized=maybe", None).await.0,
+        StatusCode::BAD_REQUEST
+    );
+
+    let (status, stats) = call(&app, "GET", "/api/transactions/stats", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!((stats["total"].as_i64(), stats["uncategorized"].as_i64()), (Some(4), Some(3)));
+}

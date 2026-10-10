@@ -5,12 +5,15 @@ import {
   Upload,
   Settings,
   Wallet,
+  WandSparkles,
 } from 'lucide-react'
+import { useTransactionStats } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transactions', label: 'Transactions', icon: ArrowDownUp },
+  { href: '/categorize', label: 'Categorize', icon: WandSparkles },
   { href: '/import', label: 'Import CSV', icon: Upload },
   { href: '/settings/rules', label: 'Rules & Categories', icon: Settings },
 ]
@@ -21,6 +24,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className, onNavigate }: SidebarProps) {
+  const uncategorized = useTransactionStats().data?.uncategorized ?? 0
+
   return (
     <aside
       className={cn(
@@ -54,6 +59,11 @@ export function Sidebar({ className, onNavigate }: SidebarProps) {
           >
             <Icon className="w-4 h-4 shrink-0" />
             {label}
+            {href === '/categorize' && uncategorized > 0 && (
+              <span className="ml-auto rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold tabular-nums text-amber-800">
+                {uncategorized}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

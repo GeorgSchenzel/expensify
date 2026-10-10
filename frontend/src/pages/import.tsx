@@ -220,7 +220,10 @@ export function ImportPage() {
             )}
 
             <div className="flex gap-2 pt-2">
-              <Button size="sm" onClick={() => navigate('/transactions')}>
+              <Button size="sm" onClick={() => navigate('/categorize')}>
+                Categorize transactions
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/transactions')}>
                 View transactions
               </Button>
               <Button variant="outline" size="sm" onClick={reset}>

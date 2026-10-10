@@ -6,12 +6,15 @@ use axum::{
     http::StatusCode,
     routing::{delete, get, post, put},
 };
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 
 use crate::{
     error::{AppError, AppResult},
     models::{Category, Rule, RuleKind, RuleWithCategory, new_id, now_timestamp},
+    money::cents_to_f64,
     routes::ApiJson,
     rules_engine::{self, build_regex},
 };
@@ -21,6 +24,7 @@ pub fn router() -> Router<SqlitePool> {
         .route("/", get(list).post(create))
         .route("/order", put(reorder))
         .route("/apply", post(apply))
+        .route("/preview", post(preview))
         .route("/{id}", delete(remove))
 }
 
@@ -80,21 +84,27 @@ pub struct RuleInput {
     is_case_insensitive: bool,
 }
 
-async fn create(
-    State(pool): State<SqlitePool>,
-    ApiJson(input): ApiJson<RuleInput>,
-) -> AppResult<(StatusCode, Json<RuleWithCategory>)> {
-    let pattern = input.pattern.trim().to_owned();
+/// Shared by create and preview, so a preview never accepts what create rejects.
+fn validate_pattern(raw: &str, kind: RuleKind, case_insensitive: bool) -> AppResult<String> {
+    let pattern = raw.trim().to_owned();
     if pattern.is_empty() {
         return Err(AppError::bad_request("Pattern must not be empty"));
     }
     if pattern.chars().count() > 500 {
         return Err(AppError::bad_request("Pattern must be at most 500 characters"));
     }
-    if input.kind == RuleKind::Regex {
-        build_regex(&pattern, input.is_case_insensitive)
+    if kind == RuleKind::Regex {
+        build_regex(&pattern, case_insensitive)
             .map_err(|err| AppError::bad_request(format!("Invalid regex pattern: {err}")))?;
     }
+    Ok(pattern)
+}
+
+async fn create(
+    State(pool): State<SqlitePool>,
+    ApiJson(input): ApiJson<RuleInput>,
+) -> AppResult<(StatusCode, Json<RuleWithCategory>)> {
+    let pattern = validate_pattern(&input.pattern, input.kind, input.is_case_insensitive)?;
 
     let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
     let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM categories WHERE id = ?")
@@ -224,4 +234,99 @@ async fn apply(
     }
     tx.commit().await?;
     Ok(Json(ApplyResult { updated, checked: rows.len() as u64 }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewInput {
+    pattern: String,
+    #[serde(rename = "type")]
+    kind: RuleKind,
+    is_case_insensitive: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryCount {
+    category_id: String,
+    count: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewResult {
+    /// Uncategorized transactions this rule would categorize if appended to
+    /// the current rules (no earlier rule matches them).
+    new_matches: u64,
+    new_match_ids: Vec<String>,
+    /// Signed sum of those transactions' amounts.
+    new_match_amount: f64,
+    /// Uncategorized transactions that match, but an existing rule matches
+    /// first (existing rules have not been applied to them yet).
+    shadowed: u64,
+    /// Already categorized transactions the pattern also matches, per category.
+    /// Only changed by "re-categorize all", but a hint the pattern is too broad.
+    categorized_matches: Vec<CategoryCount>,
+}
+
+/// Dry run of a rule that is being written: what would it match right now?
+/// Uses the exact matcher the importer uses.
+async fn preview(
+    State(pool): State<SqlitePool>,
+    ApiJson(input): ApiJson<PreviewInput>,
+) -> AppResult<Json<PreviewResult>> {
+    let pattern = validate_pattern(&input.pattern, input.kind, input.is_case_insensitive)?;
+    let candidate = Rule {
+        id: "__preview__".into(),
+        category_id: "__preview__".into(),
+        kind: input.kind,
+        pattern,
+        is_case_insensitive: input.is_case_insensitive,
+        priority: i64::MAX,
+        created_at: String::new(),
+    };
+    let candidate = rules_engine::compile(std::slice::from_ref(&candidate))
+        .pop()
+        .ok_or_else(|| AppError::bad_request("Invalid pattern"))?;
+
+    let mut conn = pool.acquire().await?;
+    let existing = rules_engine::compile(&load_ordered(&mut *conn).await?);
+    let rows: Vec<(String, String, Option<String>, i64)> =
+        sqlx::query_as("SELECT id, description, category_id, amount_cents FROM transactions")
+            .fetch_all(&mut *conn)
+            .await?;
+
+    let mut new_match_ids = Vec::new();
+    let mut new_match_cents: i64 = 0;
+    let mut shadowed = 0;
+    let mut by_category: HashMap<String, u64> = HashMap::new();
+    for (id, description, category_id, amount_cents) in rows {
+        let lowered = description.to_lowercase();
+        if !candidate.is_match(&description, &lowered) {
+            continue;
+        }
+        match category_id {
+            Some(cat) => *by_category.entry(cat).or_default() += 1,
+            None if rules_engine::categorize(&existing, &description).is_some() => shadowed += 1,
+            None => {
+                new_match_ids.push(id);
+                new_match_cents += amount_cents;
+            }
+        }
+    }
+
+    let mut categorized_matches: Vec<CategoryCount> = by_category
+        .into_iter()
+        .map(|(category_id, count)| CategoryCount { category_id, count })
+        .collect();
+    categorized_matches
+        .sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.category_id.cmp(&b.category_id)));
+
+    Ok(Json(PreviewResult {
+        new_matches: new_match_ids.len() as u64,
+        new_match_ids,
+        new_match_amount: cents_to_f64(new_match_cents),
+        shadowed,
+        categorized_matches,
+    }))
 }

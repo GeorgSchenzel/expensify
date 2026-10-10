@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { DashboardQuery, TransactionQuery } from './types'
+import type { DashboardQuery, RuleDraft, TransactionQuery } from './types'
 
 // Query keys. Mutations invalidate by prefix, replacing the old app's
 // revalidatePath() calls.
@@ -32,6 +32,27 @@ export function useDashboard(q: DashboardQuery) {
     queryKey: [...keys.dashboard, q],
     queryFn: () => api.dashboard(q),
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Categorization progress. Lives under the transactions key so it refreshes with them. */
+export function useTransactionStats() {
+  return useQuery({ queryKey: [...keys.transactions, 'stats'], queryFn: api.transactions.stats })
+}
+
+/**
+ * Live dry run of a rule being written. Depends on transactions and rules,
+ * so it sits under the transactions key (every rule change applies rules,
+ * which invalidates transactions).
+ */
+export function useRulePreview(draft: RuleDraft | null) {
+  return useQuery({
+    queryKey: [...keys.transactions, 'rule-preview', draft],
+    queryFn: () => api.rules.preview(draft!),
+    enabled: draft !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
+    staleTime: 0,
   })
 }
 

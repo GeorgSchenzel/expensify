@@ -88,6 +88,8 @@ export interface TransactionQuery {
   from?: string
   to?: string
   cat?: string[]
+  /** Only transactions without a category (OR-ed with `cat`). */
+  uncategorized?: boolean
   amountMin?: string
   amountMax?: string
 }
@@ -97,4 +99,26 @@ export interface DashboardQuery {
   to?: string
   cat?: string[]
   groupBy?: GroupBy
+}
+
+export interface RuleDraft {
+  pattern: string
+  type: RuleType
+  isCaseInsensitive: boolean
+}
+
+export interface RulePreview {
+  /** Uncategorized transactions the rule would categorize. */
+  newMatches: number
+  newMatchIds: string[]
+  newMatchAmount: number
+  /** Uncategorized matches that an existing rule matches first. */
+  shadowed: number
+  /** Already categorized transactions the pattern also matches. */
+  categorizedMatches: { categoryId: string; count: number }[]
+}
+
+export interface TransactionStats {
+  total: number
+  uncategorized: number
 }

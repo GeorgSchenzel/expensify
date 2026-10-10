@@ -13,7 +13,11 @@ just frontend         # terminal 2: UI on http://localhost:5173
 
 Then open the UI, create a few categories and rules under **Rules & Categories**, and
 import [`examples/transactions.csv`](examples/transactions.csv) on the **Import CSV** page.
-Rules added after an import can be run over existing transactions with **Apply rules**.
+The fastest way to write rules is the **Categorize** page: uncategorized transactions,
+grouped by merchant keyword, next to a rule builder that shows live how many transactions
+the rule would categorize. Click a group or a suggested word to prefill the pattern, pick
+(or create) a category, and press Enter; the rule is saved and applied at once. Rules can
+also be run over existing transactions from **Rules & Categories → Apply rules**.
 
 Production-style: `just start` builds everything and serves the UI and API together
 from the backend at http://127.0.0.1:3030.
@@ -66,8 +70,10 @@ old/                     the original Next.js app (reference only)
 |---|---|
 | `GET /api/categories` · `POST` · `PUT /{id}` · `DELETE /{id}` | Deleting a category removes its rules and uncategorizes its transactions |
 | `GET /api/rules` · `POST` · `DELETE /{id}` · `PUT /api/rules/order` | Order is a full list of rule ids |
+| `POST /api/rules/preview` | `{ pattern, type, isCaseInsensitive }` → what a new rule would match right now (dry run, same matcher as import) |
 | `POST /api/rules/apply` | `{ "includeCategorized": false }` → runs rules over existing transactions; by default only uncategorized ones, never clears a category |
-| `GET /api/transactions?from&to&cat&amountMin&amountMax&search` | Dates `yyyy-MM-dd`, inclusive; `cat` repeatable |
+| `GET /api/transactions?from&to&cat&uncategorized&amountMin&amountMax&search` | Dates `yyyy-MM-dd`, inclusive; `cat` repeatable; `uncategorized=true` |
+| `GET /api/transactions/stats` | `{ total, uncategorized }` |
 | `PATCH /api/transactions/{id}` · `POST /api/transactions/bulk-category` | `{ "categoryId": id \| null }` |
 | `POST /api/import` | `{ rows, mapping }` → `{ inserted, skipped, errors }` |
 | `GET /api/dashboard?from&to&cat&groupBy=week\|month\|year` | Totals, pie, stacked bars, monthly/yearly trend lines |

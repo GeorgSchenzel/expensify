@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { RulesTable } from '@/components/rules/rules-table'
@@ -17,7 +18,10 @@ export function RulesPage() {
       <div>
         <h1 className="text-xl font-semibold text-neutral-900">Rules & Categories</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Rules auto-categorize transactions during import, or on demand for existing ones. First matching rule wins.
+          Rules auto-categorize transactions during import, or on demand for existing ones. First matching rule wins.{' '}
+          <Link to="/categorize" className="underline underline-offset-2 hover:text-neutral-900">
+            Write rules against uncategorized transactions
+          </Link>
         </p>
       </div>
 
