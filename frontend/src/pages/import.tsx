@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ArrowRight, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
+import { ArrowRight, CheckCircle2, ChevronRight, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { CsvDropzone } from '@/components/import/csv-dropzone'
 import { PreviewTable } from '@/components/import/preview-table'
 import { ColumnMapper } from '@/components/import/column-mapper'
+import { ParsedPreview, countByStatus } from '@/components/import/parsed-preview'
+import { QueryState } from '@/components/query-state'
 import { api } from '@/lib/api'
-import { useInvalidate } from '@/lib/queries'
+import { useImportPreview, useInvalidate } from '@/lib/queries'
 import type { ImportResult, MappingConfig } from '@/lib/types'
 import { errorMessage } from '@/lib/utils'
 
@@ -20,6 +22,7 @@ const defaultMapping: MappingConfig = {
   descriptionColumn: '',
   amountMode: 'single',
   amountColumn: undefined,
+  invertAmount: false,
   creditColumn: undefined,
   debitColumn: undefined,
   currencyMode: 'manual',
@@ -54,10 +57,25 @@ export function ImportPage() {
   const invalidate = useInvalidate()
   const [step, setStep] = useState<Step>('upload')
   const [fileName, setFileName] = useState('')
+  // Bumped per upload; identifies the rows in the preview's query key.
+  const [fileId, setFileId] = useState(0)
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<Record<string, string>[]>([])
   const [mapping, setMapping] = useState<MappingConfig>(defaultMapping)
   const [result, setResult] = useState<ImportResult | null>(null)
+
+  const samples = useMemo(
+    () =>
+      Object.fromEntries(
+        headers.map((h) => [h, rows.find((r) => r[h]?.trim())?.[h]?.trim() ?? ''])
+      ),
+    [headers, rows]
+  )
+  const mappingValid = isMappingValid(mapping)
+  const preview = useImportPreview(fileId, rows, step === 'map' && mappingValid ? mapping : null)
+  // Only trust the preview for the current mapping, not a placeholder from the previous one.
+  const currentPreview = mappingValid && !preview.isPlaceholderData ? preview.data : undefined
+  const newCount = currentPreview ? countByStatus(currentPreview.rows).new : 0
 
   const importMutation = useMutation({
     mutationFn: () => api.import(rows, mapping),
@@ -79,6 +97,7 @@ export function ImportPage() {
     setHeaders(hdrs)
     setRows(data)
     setFileName(name)
+    setFileId((id) => id + 1)
     setMapping(autoDetect(hdrs))
     setStep('map')
   }
@@ -93,7 +112,7 @@ export function ImportPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-neutral-900">Import CSV</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -142,25 +161,53 @@ export function ImportPage() {
         <>
           <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="text-base">Preview</CardTitle>
+              <CardTitle className="text-base">Map columns</CardTitle>
               <CardDescription className="text-xs">
-                {fileName} · first {Math.min(rows.length, 5)} of {rows.length} rows
+                {fileName} · {rows.length} rows. Tell us which CSV column corresponds to each
+                field.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <PreviewTable headers={headers} rows={rows} />
+            <CardContent className="space-y-5">
+              <ColumnMapper
+                headers={headers}
+                samples={samples}
+                mapping={mapping}
+                onChange={setMapping}
+              />
+              <details className="group">
+                <summary className="flex items-center gap-1 text-xs font-medium text-muted-foreground cursor-pointer select-none list-none">
+                  <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+                  Raw file contents
+                </summary>
+                <div className="mt-3">
+                  <PreviewTable headers={headers} rows={rows} />
+                </div>
+              </details>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="text-base">Map columns</CardTitle>
+              <CardTitle className="text-base">Preview</CardTitle>
               <CardDescription className="text-xs">
-                Tell us which CSV column corresponds to each field.
+                What the import will do with the current mapping. Nothing is saved yet.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ColumnMapper headers={headers} mapping={mapping} onChange={setMapping} />
+              {!mappingValid ? (
+                <p className="text-sm text-muted-foreground">
+                  Complete the required fields above to see the preview.
+                </p>
+              ) : preview.data ? (
+                <div className={preview.isPlaceholderData ? 'opacity-60 transition-opacity' : ''}>
+                  <ParsedPreview preview={preview.data} />
+                </div>
+              ) : (
+                <QueryState error={preview.error} onRetry={() => void preview.refetch()} />
+              )}
+              {preview.data && preview.error && (
+                <p className="mt-3 text-xs text-red-700">{errorMessage(preview.error)}</p>
+              )}
             </CardContent>
           </Card>
 
@@ -171,7 +218,7 @@ export function ImportPage() {
             <Button
               size="sm"
               onClick={() => importMutation.mutate()}
-              disabled={!isMappingValid(mapping) || isPending}
+              disabled={!currentPreview || newCount === 0 || isPending}
               className="gap-1.5"
             >
               {isPending ? (
@@ -179,9 +226,11 @@ export function ImportPage() {
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   Importing…
                 </>
+              ) : currentPreview && newCount === 0 ? (
+                'Nothing new to import'
               ) : (
                 <>
-                  Import {rows.length} rows
+                  Import {newCount} new transaction{newCount === 1 ? '' : 's'}
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}

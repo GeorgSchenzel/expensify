@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
-import type { DashboardQuery, RuleDraft, TransactionQuery } from './types'
+import type { DashboardQuery, MappingConfig, RuleDraft, TransactionQuery } from './types'
 
 // Query keys. Mutations invalidate by prefix, replacing the old app's
 // revalidatePath() calls.
@@ -50,6 +50,26 @@ export function useRulePreview(draft: RuleDraft | null) {
     queryKey: [...keys.transactions, 'rule-preview', draft],
     queryFn: () => api.rules.preview(draft!),
     enabled: draft !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
+    staleTime: 0,
+  })
+}
+
+/**
+ * Dry run of an import. `fileId` identifies the uploaded file so the (large)
+ * rows array stays out of the query key. Depends on stored transactions and
+ * rules, so it sits under the transactions key.
+ */
+export function useImportPreview(
+  fileId: number,
+  rows: Record<string, string>[],
+  mapping: MappingConfig | null
+) {
+  return useQuery({
+    queryKey: [...keys.transactions, 'import-preview', fileId, mapping],
+    queryFn: () => api.importPreview(rows, mapping!),
+    enabled: mapping !== null,
     placeholderData: keepPreviousData,
     retry: false,
     staleTime: 0,

@@ -2,6 +2,7 @@ import type {
   Category,
   DashboardData,
   DashboardQuery,
+  ImportPreview,
   ImportResult,
   MappingConfig,
   RuleDraft,
@@ -103,6 +104,8 @@ export const api = {
   },
   import: (rows: Record<string, string>[], mapping: MappingConfig) =>
     request<ImportResult>('POST', '/import', { rows, mapping }),
+  importPreview: (rows: Record<string, string>[], mapping: MappingConfig) =>
+    request<ImportPreview>('POST', '/import/preview', { rows, mapping }),
   dashboard: (q: DashboardQuery) =>
     request<DashboardData>('GET', `/dashboard${toQueryString({ ...q })}`),
 }

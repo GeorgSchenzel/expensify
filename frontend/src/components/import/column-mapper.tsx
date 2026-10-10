@@ -8,9 +8,12 @@ import {
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface ColumnMapperProps {
   headers: string[]
+  /** First non-empty value of each column, shown next to its name. */
+  samples: Record<string, string>
   mapping: MappingConfig
   onChange: (mapping: MappingConfig) => void
 }
@@ -21,12 +24,14 @@ function ColSelect({
   label,
   value,
   headers,
+  samples,
   required,
   onChange,
 }: {
   label: string
   value: string | undefined
   headers: string[]
+  samples: Record<string, string>
   required?: boolean
   onChange: (v: string | undefined) => void
 }) {
@@ -48,6 +53,11 @@ function ColSelect({
           {headers.map((h) => (
             <SelectItem key={h} value={h}>
               {h}
+              {samples[h] && (
+                <span className="ml-2 inline-block max-w-48 truncate align-bottom font-mono text-muted-foreground">
+                  {samples[h]}
+                </span>
+              )}
             </SelectItem>
           ))}
         </SelectContent>
@@ -56,7 +66,7 @@ function ColSelect({
   )
 }
 
-export function ColumnMapper({ headers, mapping, onChange }: ColumnMapperProps) {
+export function ColumnMapper({ headers, samples, mapping, onChange }: ColumnMapperProps) {
   function update(patch: Partial<MappingConfig>) {
     onChange({ ...mapping, ...patch })
   }
@@ -69,6 +79,7 @@ export function ColumnMapper({ headers, mapping, onChange }: ColumnMapperProps) 
           label="Date column"
           value={mapping.dateColumn}
           headers={headers}
+          samples={samples}
           required
           onChange={(v) => update({ dateColumn: v ?? '' })}
         />
@@ -76,6 +87,7 @@ export function ColumnMapper({ headers, mapping, onChange }: ColumnMapperProps) 
           label="Description column"
           value={mapping.descriptionColumn}
           headers={headers}
+          samples={samples}
           required
           onChange={(v) => update({ descriptionColumn: v ?? '' })}
         />
@@ -106,25 +118,37 @@ export function ColumnMapper({ headers, mapping, onChange }: ColumnMapperProps) 
         </div>
 
         {mapping.amountMode === 'single' ? (
-          <ColSelect
-            label="Amount column"
-            value={mapping.amountColumn}
-            headers={headers}
-            required
-            onChange={(v) => update({ amountColumn: v })}
-          />
+          <div className="space-y-3">
+            <ColSelect
+              label="Amount column"
+              value={mapping.amountColumn}
+              headers={headers}
+              samples={samples}
+              required
+              onChange={(v) => update({ amountColumn: v })}
+            />
+            <Label className="flex items-center gap-2 text-xs font-normal cursor-pointer">
+              <Checkbox
+                checked={mapping.invertAmount}
+                onCheckedChange={(checked) => update({ invertAmount: checked === true })}
+              />
+              Flip signs (this file lists expenses as positive amounts)
+            </Label>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <ColSelect
               label="Credit column (incoming +)"
               value={mapping.creditColumn}
               headers={headers}
+              samples={samples}
               onChange={(v) => update({ creditColumn: v })}
             />
             <ColSelect
               label="Debit column (outgoing −)"
               value={mapping.debitColumn}
               headers={headers}
+              samples={samples}
               onChange={(v) => update({ debitColumn: v })}
             />
           </div>
@@ -158,6 +182,7 @@ export function ColumnMapper({ headers, mapping, onChange }: ColumnMapperProps) 
             label="Currency column"
             value={mapping.currencyColumn}
             headers={headers}
+            samples={samples}
             onChange={(v) => update({ currencyColumn: v })}
           />
         ) : (

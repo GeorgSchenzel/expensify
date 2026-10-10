@@ -245,6 +245,67 @@ async fn import_categorizes_and_deduplicates() {
 }
 
 #[tokio::test]
+async fn import_preview_reports_what_an_import_would_do() {
+    let app = app().await;
+    let groceries = create_category(&app, "Groceries", "#10b981").await;
+    call(&app, "POST", "/api/rules", Some(json!({ "pattern": "billa", "type": "CONTAINS", "categoryId": groceries, "isCaseInsensitive": true }))).await;
+    call(
+        &app,
+        "POST",
+        "/api/import",
+        Some(json!({
+            "rows": [{ "Date": "2026-09-28", "Description": "Salary ACME GmbH", "Amount": "2.500,00" }],
+            "mapping": mapping()
+        })),
+    )
+    .await;
+
+    let mut file = rows().as_array().unwrap().clone();
+    file.push(
+        json!({ "Date": "2026-09-03", "Description": "BILLA DANKT 1100", "Amount": "-42,10" }),
+    );
+    let (status, preview) = call(
+        &app,
+        "POST",
+        "/api/import/preview",
+        Some(json!({ "rows": file, "mapping": mapping() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    let parsed = preview["rows"].as_array().unwrap();
+    let statuses: Vec<&str> = parsed.iter().map(|r| r["status"].as_str().unwrap()).collect();
+    assert_eq!(statuses, ["new", "existing", "new", "new", "error", "error", "repeated"]);
+
+    assert_eq!(parsed[0]["row"], 1);
+    assert_eq!(parsed[0]["amount"], -42.1);
+    assert_eq!(parsed[0]["currency"], "EUR");
+    assert_eq!(parsed[0]["categoryId"], groceries.as_str());
+    assert_eq!(parsed[2]["categoryId"], Value::Null);
+    assert_eq!(parsed[3]["date"], "2026-10-02");
+    assert_eq!(parsed[4]["row"], 5);
+    assert!(parsed[4]["error"].as_str().unwrap().contains("Cannot parse date"));
+    assert_eq!(
+        preview["totals"],
+        json!([{ "currency": "EUR", "income": 0.0, "expenses": -68.89 }])
+    );
+    assert_eq!(
+        (preview["existingFrom"].as_str(), preview["existingTo"].as_str()),
+        (Some("2026-09-28"), Some("2026-09-28"))
+    );
+
+    // A preview writes nothing.
+    let (_, txs) = call(&app, "GET", "/api/transactions", None).await;
+    assert_eq!(txs.as_array().unwrap().len(), 1);
+
+    let mut m = mapping();
+    m["amountColumn"] = Value::Null;
+    let (status, _) =
+        call(&app, "POST", "/api/import/preview", Some(json!({ "rows": rows(), "mapping": m })))
+            .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn import_rejects_invalid_mapping() {
     let app = app().await;
     let mut m = mapping();

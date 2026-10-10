@@ -39,6 +39,8 @@ export interface MappingConfig {
   descriptionColumn: string
   amountMode: 'single' | 'credit-debit'
   amountColumn?: string
+  /** Negate single-column amounts (exports that list expenses as positive). */
+  invertAmount: boolean
   creditColumn?: string
   debitColumn?: string
   currencyMode: 'column' | 'manual'
@@ -50,6 +52,35 @@ export interface ImportResult {
   inserted: number
   skipped: number
   errors: string[]
+}
+
+/**
+ * How an import would treat a CSV row: `new` is inserted, `existing` is
+ * already stored, `repeated` duplicates an earlier row of the same file.
+ */
+export type ImportRowStatus = 'new' | 'existing' | 'repeated' | 'error'
+
+export interface ImportPreviewRow {
+  /** 1-based data row number. */
+  row: number
+  status: ImportRowStatus
+  /** Absent for error rows. */
+  date?: string
+  description?: string
+  amount?: number
+  currency?: string
+  /** Category the rules would assign (new rows only). */
+  categoryId?: string
+  error?: string
+}
+
+export interface ImportPreview {
+  rows: ImportPreviewRow[]
+  /** Totals of the new rows per currency; `expenses` is negative. */
+  totals: { currency: string; income: number; expenses: number }[]
+  /** Date range of the transactions already stored. */
+  existingFrom: string | null
+  existingTo: string | null
 }
 
 export type GroupBy = 'week' | 'month' | 'year'
