@@ -14,8 +14,9 @@ export function useSetTransactionCategory() {
     onMutate: async ({ id, categoryId }) => {
       await client.cancelQueries({ queryKey: keys.transactions })
       const previous = client.getQueriesData<Transaction[]>({ queryKey: keys.transactions })
+      // The transactions key also covers stats and preview caches; only the lists are arrays.
       client.setQueriesData<Transaction[]>({ queryKey: keys.transactions }, (old) =>
-        old?.map((t) => (t.id === id ? { ...t, categoryId } : t))
+        Array.isArray(old) ? old.map((t) => (t.id === id ? { ...t, categoryId } : t)) : old
       )
       return { previous }
     },
