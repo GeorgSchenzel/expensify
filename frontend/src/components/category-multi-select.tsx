@@ -11,6 +11,9 @@ interface CategoryMultiSelectProps {
   onChange: (ids: string[]) => void
   idPrefix: string
   className?: string
+  /** Pass both to offer an "Uncategorized" option (OR-ed with the selected categories). */
+  uncategorized?: boolean
+  onUncategorizedChange?: (value: boolean) => void
 }
 
 export function CategoryMultiSelect({
@@ -19,10 +22,20 @@ export function CategoryMultiSelect({
   onChange,
   idPrefix,
   className,
+  uncategorized = false,
+  onUncategorizedChange,
 }: CategoryMultiSelectProps) {
   function toggle(id: string) {
     onChange(selected.includes(id) ? selected.filter((c) => c !== id) : [...selected, id])
   }
+
+  const count = selected.length + (uncategorized ? 1 : 0)
+  const label =
+    count === 0
+      ? 'All categories'
+      : count === 1 && uncategorized
+        ? 'Uncategorized'
+        : `${count} categor${count > 1 ? 'ies' : 'y'}`
 
   return (
     <Popover>
@@ -32,17 +45,31 @@ export function CategoryMultiSelect({
           size="sm"
           className={cn(
             'h-8 text-xs font-normal',
-            selected.length > 0 ? 'border-neutral-400' : 'text-muted-foreground',
+            count > 0 ? 'border-neutral-400' : 'text-muted-foreground',
             className
           )}
         >
-          {selected.length > 0
-            ? `${selected.length} categor${selected.length > 1 ? 'ies' : 'y'}`
-            : 'All categories'}
+          {label}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-52 p-2 max-h-80 overflow-y-auto" align="start">
         <div className="space-y-1">
+          {onUncategorizedChange && (
+            <div className="flex items-center gap-2 px-1 py-1 rounded hover:bg-neutral-50">
+              <Checkbox
+                id={`${idPrefix}-uncategorized`}
+                checked={uncategorized}
+                onCheckedChange={() => onUncategorizedChange(!uncategorized)}
+              />
+              <Label
+                htmlFor={`${idPrefix}-uncategorized`}
+                className="flex items-center gap-1.5 text-xs cursor-pointer flex-1 italic"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0 border border-dashed border-neutral-400" />
+                Uncategorized
+              </Label>
+            </div>
+          )}
           {categories.map((c) => (
             <div key={c.id} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-neutral-50">
               <Checkbox

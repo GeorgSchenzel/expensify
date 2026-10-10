@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // URL state: ?from&to (yyyy-MM-dd, inclusive) &cat=id… &amountMin &amountMax.
+  // URL state: ?from&to (yyyy-MM-dd, inclusive) &cat=id… &uncategorized=true &amountMin &amountMax.
   // Without from/to the range defaults to the first of this month → today.
   const filters = useMemo<TransactionFilterValue>(() => {
     const defaults = presetRange('this-month')
@@ -22,18 +22,19 @@ export function TransactionsPage() {
       from: dateParam(searchParams, 'from') ?? defaults.from,
       to: dateParam(searchParams, 'to') ?? defaults.to,
       cat: searchParams.getAll('cat'),
+      uncategorized: searchParams.get('uncategorized') === 'true',
       amountMin: searchParams.get('amountMin') || undefined,
       amountMax: searchParams.get('amountMax') || undefined,
     }
   }, [searchParams])
 
-  const isDefault = !['from', 'to', 'cat', 'amountMin', 'amountMax'].some((k) => searchParams.has(k))
+  const isDefault = !['from', 'to', 'cat', 'uncategorized', 'amountMin', 'amountMax'].some((k) => searchParams.has(k))
 
   const categories = useCategories()
   const transactions = useTransactions(filters)
 
   function handleChange(next: TransactionFilterValue) {
-    setSearchParams(buildParams({ ...next }))
+    setSearchParams(buildParams({ ...next, uncategorized: next.uncategorized ? 'true' : undefined }))
   }
 
   const count = transactions.data?.length

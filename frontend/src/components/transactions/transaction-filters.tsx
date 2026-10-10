@@ -14,6 +14,8 @@ export interface TransactionFilterValue {
   from: string
   to: string
   cat: string[]
+  /** Include transactions without a category (OR-ed with `cat`). */
+  uncategorized: boolean
   amountMin?: string
   amountMax?: string
 }
@@ -208,6 +210,8 @@ export function TransactionFilters({
             categories={categories}
             selected={value.cat}
             onChange={(cat) => onChange({ ...value, cat })}
+            uncategorized={value.uncategorized}
+            onUncategorizedChange={(uncategorized) => onChange({ ...value, uncategorized })}
             className="w-full md:w-auto"
           />
         </div>
